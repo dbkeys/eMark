@@ -1,6 +1,9 @@
 
 # Deutsche eMark [DEM] #
 
+### Version 1.7.0 ###
+	Development for faster Initial BlockChain Download (IBD) using Headers-First / Blocks-in-Parallel Strategy
+
 ### Version 1.6.1 ###
   DNS Servers track active eMark nodes in real-time and,
   when queried, they give back a short list of the best nodes to connect to.
