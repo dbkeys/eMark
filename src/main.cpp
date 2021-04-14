@@ -951,29 +951,32 @@ uint256 WantedByOrphan(const CBlock* pblockOrphan)
 // Remove a random orphan block (which does not have any dependent orphans).
 void static PruneOrphanBlocks()
 {
-    size_t nMaxOrphanBlocksSize = GetArg("-maxorphanblocksmib", DEFAULT_MAX_ORPHAN_BLOCKS) * ((size_t) 1 << 20);
-    while (nOrphanBlocksSize > nMaxOrphanBlocksSize)
-    {
-        // Pick a random orphan block.
-        int pos = insecure_rand() % mapOrphanBlocksByPrev.size();
-        std::multimap<uint256, CBlock*>::iterator it = mapOrphanBlocksByPrev.begin();
-        while (pos--) it++;
+    if (mapOrphanBlocksByPrev.size() <= (size_t)std::max((int64)0, GetArg("-maxorphanblocks", DEFAULT_MAX_ORPHAN_BLOCKS)))
+        return;
 
-        // As long as this block has other orphans depending on it, move to one of those successors.
-        do {
-            std::multimap<uint256, CBlock*>::iterator it2 = mapOrphanBlocksByPrev.find(it->second->hashBlock);
-            if (it2 == mapOrphanBlocksByPrev.end())
-                break;
-            it = it2;
-        } while(1);
+    // Pick a random orphan block.
+    int pos = insecure_rand() % mapOrphanBlocksByPrev.size();
+    std::multimap<uint256, CBlock*>::iterator it = mapOrphanBlocksByPrev.begin();
+    while (pos--) it++;
 
-        setStakeSeenOrphan.erase(it->second->stake);
-        uint256 hash = it->second->hashBlock;
-        nOrphanBlocksSize -= it->second->vchBlock.size();
-        delete it->second;
-        mapOrphanBlocksByPrev.erase(it);
-        mapOrphanBlocks.erase(hash);
-    }
+    // As long as this block has other orphans depending on it, move to one of those successors.
+    do {
+        std::multimap<uint256, CBlock*>::iterator it2 = mapOrphanBlocksByPrev.find(it->second->GetHash());
+        if (it2 == mapOrphanBlocksByPrev.end())
+            break;
+        it = it2;
+    } while(1);
+
+    setStakeSeenOrphan.erase(it->second->GetProofOfStake());
+    // uint256 hash = it->second->GetHash();
+    // nOrphanBlocksSize -= it->second->vchBlock.size();
+    // delete it->second;
+    // mapOrphanBlocksByPrev.erase(it);
+    // mapOrphanBlocks.erase(hash);
+    uint256 hash = it->second->GetHash();
+    delete it->second;
+    mapOrphanBlocksByPrev.erase(it);
+    mapOrphanBlocks.erase(hash);
 }
 
 static CBigNum GetProofOfStakeLimit(int nTime)
@@ -2394,8 +2397,8 @@ bool static ReserealizeBlockSignature(CBlock* pblock)
 
 void CleanUpOldDuplicateStakeBlocks()
 {
-    uint64 maxAge = 24 * 60 * 60;
-    uint64 minTime = GetAdjustedTime() - maxAge;
+    uint64_t maxAge = 24 * 60 * 60;
+    uint64_t minTime = GetAdjustedTime() - maxAge;
 
     BOOST_FOREACH(PAIRTYPE(const uint256, CBlock*)& item, mapDuplicateStakeBlocks)
     {
@@ -2484,6 +2487,7 @@ bool ProcessBlock(CNode* pfrom, CBlock* pblock)
         // Cancel the best block
         // setBlockIndexValid.erase(pindexBest); // Remove from the list of immediate candidates for the best chain
         // InvalidChainFound(pindexBest);
+        CTxDB txdb;
         if (!pblock->SetBestChain(txdb, pindexBest->pprev))
             return false;
 
@@ -2564,18 +2568,13 @@ bool ProcessBlock(CNode* pfrom, CBlock* pblock)
              mi != mapOrphanBlocksByPrev.upper_bound(hashPrev);
              ++mi)
         {
-            CBlock block;
-            {
-                CDataStream ss(mi->second->vchBlock, SER_DISK, CLIENT_VERSION);
-                ss >> block;
-            }
-            block.BuildMerkleTree();
-            if (block.AcceptBlock())
-                vWorkQueue.push_back(mi->second->hashBlock);
-            mapOrphanBlocks.erase(mi->second->hashBlock);
-            setStakeSeenOrphan.erase(block.GetProofOfStake());
-            nOrphanBlocksSize -= mi->second->vchBlock.size();
-            delete mi->second;
+            CBlock* pblockOrphan = (*mi).second;
+            pblockOrphan.BuildMerkleTree();
+            if (pblockOrphan.AcceptBlock())
+                vWorkQueue.push_back(pblockOrphan->GetHash());
+            mapOrphanBlocks.erase(pblockOrphan->GetHash());
+            setStakeSeenOrphan.erase(pblockOrphan->GetProofOfStake());
+            delete pblockOrphan;
         }
         mapOrphanBlocksByPrev.erase(hashPrev);
     }
