@@ -2512,8 +2512,6 @@ bool ProcessBlock(CNode* pfrom, CBlock* pblock)
     // If we don't already have its previous block, shunt it off to holding area until we get it
     if (pblock->hashPrevBlock != 0 && !mapBlockIndex.count(pblock->hashPrevBlock))
     {
-        LogPrintf("ProcessBlock: ORPHAN BLOCK %lu, current=%s, prev=%s\n", (unsigned long)mapOrphanBlocks.size(), hash.ToString(), pblock->hashPrevBlock.ToString());
-
         // Accept orphans as long as there is a node to request its parents from
         if (pfrom) {
             PruneOrphanBlocks();
@@ -2524,7 +2522,7 @@ bool ProcessBlock(CNode* pfrom, CBlock* pblock)
                 // Limited duplicity on stake: prevents block flood attack
                 // Duplicate stake allowed only when there is orphan child block
                 if (setStakeSeenOrphan.count(pblock2->GetProofOfStake()) && !mapOrphanBlocksByPrev.count(hash) && !Checkpoints::WantedByPendingSyncCheckpoint(hash))
-                    return error("ProcessBlock() : duplicate proof-of-stake (%s, %d) for orphan block %s", pblock->GetProofOfStake().first.ToString(), pblock->GetProofOfStake().second, hash.ToString());
+                    return error("ProcessBlock: ORPHAN BLOCK %lu, current=%s, prev=%s\n", (unsigned long)mapOrphanBlocks.size(), hash.ToString(), pblock->hashPrevBlock.ToString());
                 else
                     setStakeSeenOrphan.insert(pblock2->GetProofOfStake());
             }
